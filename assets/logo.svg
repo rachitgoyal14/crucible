@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="crucible logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161b22"/>
+      <stop offset="1" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4250"/>
+      <stop offset="1" stop-color="#171c24"/>
+    </linearGradient>
+    <radialGradient id="melt" cx="0.5" cy="0.45" r="0.75">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="0.55" stop-color="#ff7a29"/>
+      <stop offset="1" stop-color="#c9184a"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff9e4f" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff9e4f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="drip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7a29"/>
+      <stop offset="1" stop-color="#c9184a"/>
+    </linearGradient>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bg)" stroke="#30363d" stroke-width="2"/>
+
+  <ellipse cx="256" cy="230" rx="180" ry="130" fill="url(#glow)" filter="url(#blur)"/>
+  <ellipse cx="256" cy="404" rx="118" ry="14" fill="#000000" opacity="0.35" filter="url(#blur)"/>
+
+  <path d="M150 150 C166 226 178 312 198 346 C220 366 292 366 314 346 C334 312 346 226 362 150 Z"
+        fill="url(#steel)" stroke="#3d444d" stroke-width="3"/>
+  <path d="M186 156 C190 210 180 258 176 288 C176 300 188 302 192 292 C198 258 196 204 200 158 Z"
+        fill="url(#drip)" opacity="0.85"/>
+
+  <ellipse cx="256" cy="150" rx="106" ry="18" fill="#12161c" stroke="#3d444d" stroke-width="3"/>
+  <ellipse cx="256" cy="150" rx="90" ry="12" fill="url(#melt)"/>
+  <ellipse cx="238" cy="147" rx="30" ry="4" fill="#ffe8a3" opacity="0.75"/>
+
+  <circle cx="298" cy="102" r="6" fill="#ffb347"/>
+  <circle cx="272" cy="68" r="4" fill="#ff7a29" opacity="0.85"/>
+  <circle cx="318" cy="52" r="2.5" fill="#ffd166" opacity="0.7"/>
+  <circle cx="250" cy="40" r="2" fill="#ffb347" opacity="0.5"/>
+</svg>

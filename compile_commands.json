@@ -1,0 +1,72 @@
+[
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/main.c",
+    "file": "src/main.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/wtxt.c",
+    "file": "src/wtxt.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/math.c",
+    "file": "src/math.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/bpe.c",
+    "file": "src/bpe.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/model.c",
+    "file": "src/model.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/chat.c",
+    "file": "src/chat.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/term.c",
+    "file": "src/term.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/tui_nc.c",
+    "file": "src/tui_nc.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c src/tui_tr.c",
+    "file": "src/tui_tr.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c tests/test_math.c",
+    "file": "tests/test_math.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c tests/test_bpe.c",
+    "file": "tests/test_bpe.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c tests/test_model.c",
+    "file": "tests/test_model.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c tests/test_chat.c",
+    "file": "tests/test_chat.c"
+  },
+  {
+    "directory": "/Users/rachitgoyal/Desktop/projects/ucaProjects/crucible",
+    "command": "gcc -Wall -Wextra -O0 -g -Iinclude -c tests/test_tui.c",
+    "file": "tests/test_tui.c"
+  }
+]
