@@ -1,0 +1,22 @@
+# regenerate: ./crucible encode "Hello, world!" etc. (safetensors pipeline)
+
+encode "Hello, world!":
+15496 11 995 0
+
+encode "The quick brown fox jumps":
+464 2068 7586 21831 18045
+
+forward "Hello":
+11 -32.391758 [,]
+13 -32.591454 [.]
+198 -33.203354 [
+]
+12 -33.836437 [-]
+25 -33.876507 [:]
+
+forward "The quick brown fox":
+274 -82.757538 [es]
+373 -83.800774 [ was]
+318 -84.084343 [ is]
+338 -84.121399 ['s]
+11 -84.179192 [,]
