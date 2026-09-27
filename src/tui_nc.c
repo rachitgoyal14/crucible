@@ -55,83 +55,139 @@ static int cpn(const char *s, int n) {
     return c;
 }
 
-static int msg_rows(const char *s, int w) {
-    int rows = 0;
-    const char *seg = s;
-    for (;;) {
-        const char *nl = strchr(seg, '\n');
-        int len = nl ? (int)(nl - seg) : (int)strlen(seg);
-        int cp = cpn(seg, len);
-        rows += cp > 0 ? (cp + w - 1) / w : 1;
-        if (!nl) break;
-        seg = nl + 1;
+/* wrap s into out (max TR_W each), breaking at spaces; returns line count */
+static int wrap(const char *s, int w, char out[][512], int maxl) {
+    int n = 0, len = strlen(s);
+    int start = 0;
+    if (w < 8) w = 8;
+    if (w > 511) w = 511;
+    while (start < len && n < maxl) {
+        int take = len - start;
+        if (take > w) {
+            take = w;
+            int sp = -1;
+            for (int i = take; i > 0; i--) {
+                if (s[start + i] == ' ') {
+                    sp = i;
+                    break;
+                }
+            }
+            if (sp > 0) take = sp;
+            while (take > 0 && ((unsigned char)s[start + take] & 0xC0) == 0x80) take--;
+            if (take <= 0) take = 1;
+        }
+        memcpy(out[n], s + start, take);
+        out[n][take] = 0;
+        n++;
+        start += take;
+        while (s[start] == ' ') start++;
     }
-    return rows;
+    if (n == 0 && n < maxl) {
+        out[n][0] = 0;
+        n++;
+    }
+    return n;
 }
 
-static void draw_msg(int idx, int w, int skip, int maxr, int *pr) {
-    const char *seg = tr[idx].text;
+static int colw(void) {
+    return ww / 2 - 2;
+}
+
+static int msg_rows(int idx) {
+    char lines[512][512];
+    int w = tr[idx].tag == 's' ? ww - 2 : colw();
+    int n = wrap(tr[idx].text, w, lines, 512);
+    return 1 + n;
+}
+
+static void putline(int y, int x, int w, const char *s) {
+    char line[TR_W];
+    int n = strlen(s);
+    if (n > w) n = w;
+    memcpy(line, s, n);
+    line[n] = 0;
+    mvwaddstr(tw, y, x, line);
+    wclrtoeol(tw);
+}
+
+static void draw_msg(int idx, int skip, int maxr, int *pr) {
+    char lines[512][512];
+    int w = ww - 2, x = 1;
     int row = 0;
-    int col = tr[idx].tag == 'u' ? 0 : 0;
-    (void)col;
-    if (use_color) {
-        if (tr[idx].tag == 'u') wattron(tw, COLOR_PAIR(1));
-        else if (tr[idx].tag == 'a') wattron(tw, COLOR_PAIR(2));
-        else wattron(tw, COLOR_PAIR(3));
+
+    if (tr[idx].tag == 'u') {
+        w = colw();
+        x = 1;
+    } else if (tr[idx].tag == 'a') {
+        w = colw();
+        x = ww / 2 + 1;
     }
-    for (;;) {
-        const char *nl = strchr(seg, '\n');
-        int len = nl ? (int)(nl - seg) : (int)strlen(seg);
-        int off = 0;
-        while (off < len) {
-            int take = len - off;
-            if (take > w) {
-                take = w;
-                while (take > 0 && ((unsigned char)seg[off + take] & 0xC0) == 0x80) take--;
-            }
-            if (row >= skip && *pr < maxr) {
-                char line[TR_W];
-                memcpy(line, seg + off, take);
-                line[take] = 0;
-                wmove(tw, *pr, 0);
-                waddstr(tw, line);
-                wclrtoeol(tw);
+    int n = wrap(tr[idx].text, w, lines, 512);
+
+    if (tr[idx].tag == 's') {
+    if (use_color) wattron(tw, COLOR_PAIR(3));
+    if (row >= skip) {
+        if (*pr < maxr) {
+            int len = strlen(tr[idx].text);
+            int cx = (ww - len) / 2;
+            if (cx < 1) cx = 1;
+            mvwaddstr(tw, *pr, cx, tr[idx].text);
+            wclrtoeol(tw);
+            (*pr)++;
+        }
+    }
+    row++;
+    if (use_color) wattroff(tw, COLOR_PAIR(3));
+    return;
+    }
+    if (use_color) wattron(tw, COLOR_PAIR(tr[idx].tag == 'u' ? 1 : 2));
+    if (use_color) wattron(tw, A_BOLD);
+    if (row >= skip) {
+        if (*pr < maxr) {
+            mvwaddstr(tw, *pr, x, tr[idx].tag == 'u' ? "you" : "ai");
+            wclrtoeol(tw);
+            (*pr)++;
+        }
+    }
+    row++;
+    if (use_color) wattroff(tw, A_BOLD);
+    if (use_color) wattroff(tw, COLOR_PAIR(1));
+    if (use_color) wattroff(tw, COLOR_PAIR(2));
+    for (int i = 0; i < n; i++) {
+        if (row >= skip) {
+            if (*pr < maxr) {
+                putline(*pr, x, w, lines[i]);
                 (*pr)++;
             }
-            row++;
-            off += take;
         }
-        if (!nl) break;
-        seg = nl + 1;
-    }
-    if (use_color) {
-        wattroff(tw, COLOR_PAIR(1));
-        wattroff(tw, COLOR_PAIR(2));
-        wattroff(tw, COLOR_PAIR(3));
+        row++;
     }
 }
 
 static void tr_draw(void) {
-    int w = ww < TR_W ? ww : TR_W - 1;
     long total = 0;
     int printed = 0;
     long skip, row = 0;
 
     werase(tw);
-    if (w < 1 || th < 1) return;
-    for (int i = 0; i < trn; i++) total += msg_rows(tr[i].text, w);
+    if (ww < 1 || th < 1) return;
+    for (int i = 0; i < trn; i++) total += msg_rows(i);
     skip = total - troff - th;
     if (skip < 0) skip = 0;
     for (int i = 0; i < trn && printed < th; i++) {
-        int r = msg_rows(tr[i].text, w);
+        int r = msg_rows(i);
         if (row + r <= skip) {
             row += r;
             continue;
         }
-        draw_msg(i, w, (int)(skip - row), th, &printed);
+        draw_msg(i, (int)(skip - row), th, &printed);
         row += r;
     }
-    if (skip > 0) mvwaddstr(tw, 0, w - 9 > 0 ? w - 9 : 0, "-- more --");
+    if (total > th) {
+        char cnt[32];
+        snprintf(cnt, sizeof(cnt), "[%ld/%ld]", total - troff, total);
+        mvwaddstr(tw, th - 1, ww - (int)strlen(cnt) - 1, cnt);
+    }
     wrefresh(tw);
 }
 
