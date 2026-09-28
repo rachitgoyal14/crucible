@@ -1,3 +1,4 @@
+#include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +21,7 @@
 
 #if HAVE_NCURSES
 
-static WINDOW *tw, *sw, *iw;
+static WINDOW *hw, *tw, *sw, *iw;
 static int th, ww, use_color;
 static int done;
 
@@ -90,7 +91,8 @@ static int wrap(const char *s, int w, char out[][512], int maxl) {
 }
 
 static int colw(void) {
-    return ww / 2 - 2;
+    int w = (ww - 2) / 2 - 1;
+    return w < 8 ? 8 : w;
 }
 
 static int msg_rows(int idx) {
@@ -101,12 +103,12 @@ static int msg_rows(int idx) {
 }
 
 static void putline(int y, int x, int w, const char *s) {
-    char line[TR_W];
+    char line[512];
     int n = strlen(s);
     if (n > w) n = w;
     memcpy(line, s, n);
     line[n] = 0;
-    mvwaddstr(tw, y, x, line);
+    mvwaddstr(tw, y + 1, x, line);
     wclrtoeol(tw);
 }
 
@@ -131,7 +133,7 @@ static void draw_msg(int idx, int skip, int maxr, int *pr) {
             int len = strlen(tr[idx].text);
             int cx = (ww - len) / 2;
             if (cx < 1) cx = 1;
-            mvwaddstr(tw, *pr, cx, tr[idx].text);
+            mvwaddstr(tw, *pr + 1, cx, tr[idx].text);
             wclrtoeol(tw);
             (*pr)++;
         }
@@ -144,7 +146,7 @@ static void draw_msg(int idx, int skip, int maxr, int *pr) {
     if (use_color) wattron(tw, A_BOLD);
     if (row >= skip) {
         if (*pr < maxr) {
-            mvwaddstr(tw, *pr, x, tr[idx].tag == 'u' ? "you" : "ai");
+            mvwaddstr(tw, *pr + 1, x, tr[idx].tag == 'u' ? "you" : "ai");
             wclrtoeol(tw);
             (*pr)++;
         }
@@ -164,29 +166,59 @@ static void draw_msg(int idx, int skip, int maxr, int *pr) {
     }
 }
 
+static void hd_draw(void) {
+    werase(hw);
+    if (use_color) {
+        wattron(hw, COLOR_PAIR(5));
+        wattron(hw, A_BOLD);
+    }
+    mvwaddstr(hw, 0, 1, "crucible");
+    if (use_color) {
+        wattroff(hw, A_BOLD);
+        wattroff(hw, COLOR_PAIR(5));
+    }
+    mvwaddstr(hw, 0, 11, "GPT-2 124M - pure C");
+    char r[32];
+    snprintf(r, sizeof(r), "%d cols", ww);
+    mvwaddstr(hw, 0, ww - (int)strlen(r) - 1, r);
+    wrefresh(hw);
+}
+
 static void tr_draw(void) {
     long total = 0;
     int printed = 0;
     long skip, row = 0;
+    int maxr;
 
     werase(tw);
-    if (ww < 1 || th < 1) return;
+    if (use_color) {
+        wattron(tw, COLOR_PAIR(7));
+        box(tw, 0, 0);
+        wattroff(tw, COLOR_PAIR(7));
+    } else {
+        box(tw, 0, 0);
+    }
+    maxr = th - 2;
+    if (ww < 10 || maxr < 1) {
+        wrefresh(tw);
+        return;
+    }
     for (int i = 0; i < trn; i++) total += msg_rows(i);
-    skip = total - troff - th;
+    skip = total - troff - maxr;
     if (skip < 0) skip = 0;
-    for (int i = 0; i < trn && printed < th; i++) {
+    for (int i = 0; i < trn && printed < maxr; i++) {
         int r = msg_rows(i);
         if (row + r <= skip) {
             row += r;
             continue;
         }
-        draw_msg(i, (int)(skip - row), th, &printed);
+        draw_msg(i, (int)(skip - row), maxr, &printed);
         row += r;
     }
-    if (total > th) {
+    if (total > maxr) {
         char cnt[32];
         snprintf(cnt, sizeof(cnt), "[%ld/%ld]", total - troff, total);
-        mvwaddstr(tw, th - 1, ww - (int)strlen(cnt) - 1, cnt);
+        mvwaddstr(tw, th - 2, ww - (int)strlen(cnt) - 2, cnt);
     }
     wrefresh(tw);
 }
@@ -202,33 +234,62 @@ static void st_draw(Chat *c, float temp, int ntok, double secs, int busy) {
 }
 
 static void in_draw(const char *buf, int cur) {
-    int plen = 5, hcp;
-    char head[1100];
+    int w = ww - 6, start = 0;
+    char vis[1100];
+
     werase(iw);
-    mvwaddstr(iw, 0, 0, "you: ");
-    if (cur > 0) {
-        memcpy(head, buf, cur);
-        head[cur] = 0;
-        mvwaddstr(iw, 0, plen, head);
+    if (use_color) {
+        wattron(iw, COLOR_PAIR(7));
+        box(iw, 0, 0);
+        wattroff(iw, COLOR_PAIR(7));
+    } else {
+        box(iw, 0, 0);
     }
-    hcp = cpn(buf, cur);
-    wmove(iw, 0, plen + hcp);
+    if (use_color) {
+        wattron(iw, COLOR_PAIR(6));
+        wattron(iw, A_BOLD);
+    }
+    mvwaddstr(iw, 1, 2, ">");
+    if (use_color) {
+        wattroff(iw, A_BOLD);
+        wattroff(iw, COLOR_PAIR(6));
+    }
+    if (w < 8) {
+        wrefresh(iw);
+        return;
+    }
+    if (cur - start >= w) start = cur - w + 1;
+    if (cur < start) start = cur;
+    if (buf[0] == 0) {
+        if (use_color) wattron(iw, COLOR_PAIR(3));
+        mvwaddstr(iw, 1, 4, "Type a message...  (/help)");
+        if (use_color) wattroff(iw, COLOR_PAIR(3));
+    } else {
+        int n = strlen(buf) - start;
+        if (n > w) n = w;
+        memcpy(vis, buf + start, n);
+        vis[n] = 0;
+        mvwaddstr(iw, 1, 4, vis);
+    }
+    wmove(iw, 1, 4 + cpn(buf + start, cur - start));
     wrefresh(iw);
 }
 
 static void layout(void) {
     int H, W;
     getmaxyx(stdscr, H, W);
-    if (H < 4) H = 4;
-    if (W < 8) W = 8;
-    th = H - 2;
+    if (H < 8) H = 8;
+    if (W < 20) W = 20;
+    th = H - 5;
     ww = W;
+    if (hw) delwin(hw);
     if (tw) delwin(tw);
     if (sw) delwin(sw);
     if (iw) delwin(iw);
-    tw = newwin(th, W, 0, 0);
-    sw = newwin(1, W, H - 2, 0);
-    iw = newwin(1, W, H - 1, 0);
+    hw = newwin(1, W, 0, 0);
+    tw = newwin(th, W, 1, 0);
+    sw = newwin(1, W, H - 4, 0);
+    iw = newwin(3, W, H - 3, 0);
     scrollok(tw, FALSE);
     keypad(iw, TRUE);
 }
@@ -309,6 +370,7 @@ int tui_chat(int max) {
         return 1;
     }
     watch();
+    setlocale(LC_ALL, "");
     initscr();
     cbreak();
     noecho();
@@ -319,14 +381,18 @@ int tui_chat(int max) {
         use_default_colors();
         init_pair(1, COLOR_CYAN, -1);
         init_pair(2, COLOR_GREEN, -1);
-        init_pair(3, COLOR_BLACK, -1);
+        init_pair(3, COLOR_YELLOW, -1);
         init_pair(4, COLOR_WHITE, COLOR_BLACK);
+        init_pair(5, COLOR_YELLOW, -1);
+        init_pair(6, COLOR_MAGENTA, -1);
+        init_pair(7, COLOR_BLUE, -1);
     }
     layout();
     tr_push('s', "crucible — /help for commands, /quit to leave");
 
     for (;;) {
         int k;
+        hd_draw();
         tr_draw();
         st_draw(&c, temp, ntok, secs, 0);
         in_draw(buf, cur);
