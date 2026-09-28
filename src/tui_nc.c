@@ -224,11 +224,18 @@ static void tr_draw(void) {
 }
 
 static void st_draw(Chat *c, float temp, int ntok, double secs, int busy) {
+    static const char frames[] = "|/-\\";
+    static int fi;
     char line[1024];
     werase(sw);
     if (use_color) wbkgd(sw, COLOR_PAIR(4));
-    snprintf(line, sizeof(line), " %d/%d tok +%ld drop | temp %g | %s %d tok %.1fs",
-        c->len, CHAT_WINDOW, c->dropped, temp, busy ? "gen" : "last", ntok, secs);
+    if (busy) {
+        snprintf(line, sizeof(line), " [%c] gen %d tok | %d/%d tok +%ld drop | temp %g",
+            frames[fi++ % 4], ntok, c->len, CHAT_WINDOW, c->dropped, temp);
+    } else {
+        snprintf(line, sizeof(line), " %d/%d tok +%ld drop | temp %g | last %d tok %.1fs",
+            c->len, CHAT_WINDOW, c->dropped, temp, ntok, secs);
+    }
     mvwaddnstr(sw, 0, 0, line, ww - 1);
     wrefresh(sw);
 }
@@ -388,7 +395,8 @@ int tui_chat(int max) {
         init_pair(7, COLOR_BLUE, -1);
     }
     layout();
-    tr_push('s', "crucible — /help for commands, /quit to leave");
+    tr_push('s', ".- crucible - GPT-2 124M in pure C -.");
+    tr_push('s', "say hi, or /help for commands, /quit to leave");
 
     for (;;) {
         int k;
