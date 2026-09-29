@@ -216,7 +216,9 @@ models/                   gitignored, export once (~1.9 GB)
 
 ## Credits
 
-- Reference and inspiration: [gpt2LiveStream](https://github.com/VishwajeetSinghParihar750/gpt2LiveStream)
+- Model and forward pass: [gpt2LiveStream](https://github.com/VishwajeetSinghParihar750/gpt2LiveStream) (reference only — none of its language, deps, or code)
+- C structure and tokenizer approach: [llama2.c](https://github.com/karpathy/llama2.c) by Andrej Karpathy
+- TUI layout (split message columns, boxed panes, scroll counter): [Term-Chat-TUI](https://github.com/GrandBIRDLizard/Term-Chat-TUI.git)
 - Weights: [openai-community/gpt2](https://huggingface.co/openai-community/gpt2)
 - Logo: hand-written SVG in `assets/logo.svg`
 - License: MIT — see [LICENSE](LICENSE)
