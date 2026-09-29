@@ -302,23 +302,36 @@ static void layout(void) {
 }
 
 static void help_box(void) {
-    int H, W, h = 14, w = 42;
+    int H, W, h = 18, w = 48;
     WINDOW *hp;
     getmaxyx(stdscr, H, W);
     if (h > H) h = H;
     if (w > W) w = W;
     hp = newwin(h, w, (H - h) / 2, (W - w) / 2);
+    if (!hp) return;
+    if (use_color) wattron(hp, COLOR_PAIR(7));
     box(hp, 0, 0);
+    if (use_color) wattroff(hp, COLOR_PAIR(7));
+    if (use_color) {
+        wattron(hp, COLOR_PAIR(5));
+        wattron(hp, A_BOLD);
+    }
     mvwaddstr(hp, 1, 2, "crucible commands");
+    if (use_color) {
+        wattroff(hp, A_BOLD);
+        wattroff(hp, COLOR_PAIR(5));
+    }
     mvwaddstr(hp, 3, 2, "/quit         leave");
     mvwaddstr(hp, 4, 2, "/reset        forget chat");
     mvwaddstr(hp, 5, 2, "/temp N       temperature");
     mvwaddstr(hp, 6, 2, "/tokens       context usage");
     mvwaddstr(hp, 7, 2, "/save FILE    save transcript");
     mvwaddstr(hp, 8, 2, "/load FILE    restore transcript");
-    mvwaddstr(hp, 10, 2, "PgUp/PgDn     scroll");
-    mvwaddstr(hp, 11, 2, "Up/Down       history");
-    mvwaddstr(hp, 12, 2, "any key closes");
+    mvwaddstr(hp, 10, 2, "PgUp/PgDn     scroll transcript");
+    mvwaddstr(hp, 11, 2, "Up/Down       input history");
+    mvwaddstr(hp, 12, 2, "Tab           complete /command");
+    mvwaddstr(hp, 13, 2, "Ctrl-R        search history");
+    mvwaddstr(hp, 15, 2, "any key closes");
     wrefresh(hp);
     wgetch(hp);
     delwin(hp);
