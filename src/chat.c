@@ -107,9 +107,9 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
     char prompt[2048];
     int ids[N_CTX];
 
-    /* one good exchange so the base model learns the shape of an answer */
+    /* good exchanges so the base model learns the shape of an answer */
     if (c->len == 0) {
-        int sn = bpe_encode(b, "User: Hello\nAssistant: Hello! How can I help you today?\n", ids, N_CTX);
+        int sn = bpe_encode(b, "User: Hello\nAssistant: Hello! How can I help you today?\nUser: What is 2+2?\nAssistant: 4.\n", ids, N_CTX);
         if (sn > 0 && chat_add(c, ids, sn) != 0) return -1;
     }
     snprintf(prompt, sizeof(prompt), "User: %s\nAssistant:", msg);
