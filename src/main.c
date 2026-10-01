@@ -131,7 +131,6 @@ static int generate_text(const char *text, int max) {
     int ids[N_CTX];
     char out[4096];
 
-    srand((unsigned)time(NULL));
     if (engine_load(&e) != 0) {
         return 1;
     }

@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 #include "model.h"
 #include "ops.h"
 
@@ -207,6 +209,44 @@ int forward(GPT2 *g, const int *ids, float *logits, int seq_len) {
     return 0;
 }
 
+static unsigned long mt[624];
+static int mti = 625;
+
+static void mt_seed(unsigned long s) {
+    mt[0] = s & 0xffffffffUL;
+    for (mti = 1; mti < 624; mti++) {
+        mt[mti] = 1812433253UL * (mt[mti - 1] ^ (mt[mti - 1] >> 30)) + mti;
+        mt[mti] &= 0xffffffffUL;
+    }
+}
+
+static unsigned long mt_next(void) {
+    unsigned long y;
+    static const unsigned long mag[2] = {0x0UL, 0x9908b0dfUL};
+
+    if (mti >= 624) {
+        if (mti == 625) mt_seed((unsigned long)time(NULL) ^ ((unsigned long)getpid() << 16));
+        int kk;
+        for (kk = 0; kk < 227; kk++) {
+            y = (mt[kk] & 0x80000000UL) | (mt[kk + 1] & 0x7fffffffUL);
+            mt[kk] = mt[kk + 397] ^ (y >> 1) ^ mag[y & 0x1UL];
+        }
+        for (; kk < 623; kk++) {
+            y = (mt[kk] & 0x80000000UL) | (mt[kk + 1] & 0x7fffffffUL);
+            mt[kk] = mt[kk - 227] ^ (y >> 1) ^ mag[y & 0x1UL];
+        }
+        y = (mt[623] & 0x80000000UL) | (mt[0] & 0x7fffffffUL);
+        mt[623] = mt[396] ^ (y >> 1) ^ mag[y & 0x1UL];
+        mti = 0;
+    }
+    y = mt[mti++];
+    y ^= (y >> 11);
+    y ^= (y << 7) & 0x9d2c5680UL;
+    y ^= (y << 15) & 0xefc60000UL;
+    y ^= (y >> 18);
+    return y;
+}
+
 int sample(const float *logits, int n, float temp, int topk) {
     if (temp <= 0.0f) {
         int best = 0;
@@ -236,7 +276,7 @@ int sample(const float *logits, int n, float temp, int topk) {
     for (int i = 0; i < topk; i++) {
         sum += expf((logits[idx[i]] - max) / temp);
     }
-    float r = (float)rand() / (float)RAND_MAX * sum;
+    float r = (float)(mt_next() * (1.0 / 4294967296.0)) * sum;
     float acc = 0.0f;
     int pick = idx[topk - 1];
     for (int i = 0; i < topk; i++) {

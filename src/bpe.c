@@ -367,15 +367,11 @@ static int next_piece(const char *s, int *len) {
         *len = i;
         return 1;
     }
+    /* whitespace run; give one back when text follows, like the regex */
     i = 0;
     while (is_space(s[i])) i++;
-    int j = i;
-    while (is_space(s[j])) j++;
-    if (s[j] == 0) {
-        *len = i;
-        return 1;
-    }
-    *len = j;
+    if (s[i] != 0 && i > 1) i--;
+    *len = i;
     return 1;
 }
 
