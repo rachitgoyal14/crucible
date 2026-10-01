@@ -5,7 +5,7 @@
 
 **GPT-2 (124M), melted down to C you can actually read.**
 
-Tokenizer, weights loader, attention, sampling, KV-cache, ncurses chat —
+Tokenizer, weights loader, attention, sampling, ncurses chat —
 no PyTorch, no Python at runtime, nothing you can't open and read.
 
 [![language](https://img.shields.io/badge/language-C-00599C?logo=c&logoColor=white)](src)
@@ -137,13 +137,14 @@ Details that matter and are pinned by tests:
   reference, sliced per head afterwards.
 - **Causal mask as `-inf` before softmax**, tanh-approximation GELU,
   LayerNorm eps `1e-5`, LM head tied to `wte`.
-- **KV-cache** — each layer keeps its K/V rows. A turn prefills the
-  prompt once; every generated token is a single-position pass instead
-  of recomputing the whole window. The cache keys on the exact token
-  prefix, so window drops, `/reset`, and `/load` rebuild it safely, and
-  its output is **bit-identical** to the full-recompute path (pinned by a
-  `memcmp` unit test over the full 50257-float logit vector).
-- **Sampling** — top-k 40, temp 0.8, floor `1e-5`, greedy at 0.
+- **No KV-cache** — every token is a full recompute over the context,
+  exactly like the reference. Slower than caching, but half the code
+  and nothing to keep in sync.
+- **Sampling** — top-k 40, temp 0.8, floor `1e-5`, greedy at 0, drawn
+  with an in-C MT19937 like the reference.
+- **Tokenizer** — byte-level BPE verified token-for-token against
+  HuggingFace `GPT2Tokenizer`, including multi-space and ` $19.99`
+  cases (pinned in `test_bpe`).
 
 ## Verification
 
@@ -167,13 +168,12 @@ already on disk:
 | What | Number |
 |---|---|
 | Weights parse at startup | ~14 s (1.9 GB of decimal text) |
-| Greedy `generate "Hello" 20` | 87 s (full recompute) → **22 s** (KV-cache) |
-| Cached generation loop | ~10x faster per token |
+| Greedy `generate "Hello" 20` | ~87 s (full recompute per token) |
 | `encode` / `forward` after load | instant |
 
 `make release` (`-O3`) speeds the math up further. There are no fused
-kernels, no BLAS, no SIMD — the trade for total readability is speed,
-and the KV-cache took the biggest bite out of it.
+kernels, no BLAS, no SIMD, no KV-cache — the trade for total readability
+is speed, exactly like the reference.
 
 **Why text-file weights?** Every tensor is a file you can `head`, `wc`,
 and diff when a layer looks wrong; the loader is ~100 lines of C; and
@@ -188,13 +188,13 @@ after the switch).
 ```
 Makefile                  make (debug) · make release (-O3) · make test
 compile_commands.json     -Iinclude for clangd / your editor
-include/                  headers — model.h has the KV-cache API
+include/                  headers for each src file
 src/
   main.c                  CLI dispatch + classic REPL
   wtxt.c                  loads the 148 text dumps (~100 lines)
   bpe.c                   byte-pair encoder/decoder (vocab.json + merges.txt)
   math.c                  matmul, layernorm, softmax, tanh GELU
-  model.c                 12-layer forward, sampling, KV-cache
+  model.c                 12-layer forward, MT19937 top-k sampling
   chat.c                  context window, history, save/load
   term.c                  raw-mode line editing for the classic REPL
   tui_nc.c                ncurses panes (transcript / status / input)
