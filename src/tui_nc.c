@@ -1,4 +1,5 @@
 #include <locale.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -338,18 +339,73 @@ static void help_box(void) {
 }
 
 typedef struct {
-    int ntok;
     Chat *c;
+    GPT2 *g;
+    BPE *b;
+    float *logits;
+    char msg[1024];
+    char reply[2048];
+    int max;
     float temp;
-    clock_t t0;
-} StreamCtx;
+    int rc;
+    int ntok;
+    double secs;
+    int active;
+    pthread_mutex_t mu;
+    char pend[8192];
+    int pendlen;
+} GenTask;
 
-static void on_piece(const char *p, void *ctx) {
-    StreamCtx *s = ctx;
-    s->ntok++;
-    tr_append('a', p);
-    tr_draw();
-    st_draw(s->c, s->temp, s->ntok, (double)(clock() - s->t0) / CLOCKS_PER_SEC, 1);
+static void piece_cb(const char *p, void *ctx) {
+    GenTask *t = ctx;
+    pthread_mutex_lock(&t->mu);
+    int n = strlen(p);
+    if (t->pendlen + n < (int)sizeof(t->pend) - 1) {
+        memcpy(t->pend + t->pendlen, p, n);
+        t->pendlen += n;
+        t->pend[t->pendlen] = 0;
+    }
+    t->ntok++;
+    pthread_mutex_unlock(&t->mu);
+}
+
+static void *gen_run(void *arg) {
+    GenTask *t = arg;
+    clock_t t0 = clock();
+    chat_on_token(piece_cb, t);
+    t->rc = chat_turn(t->c, t->g, t->b, t->logits, t->msg, t->reply, sizeof(t->reply), t->max, t->temp);
+    chat_on_token(NULL, NULL);
+    pthread_mutex_lock(&t->mu);
+    t->secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
+    t->active = 0;
+    pthread_mutex_unlock(&t->mu);
+    return NULL;
+}
+
+/* pump streamed pieces into history; returns worker ntok */
+static int drain(GenTask *t) {
+    char chunk[8192];
+    int n = 0, ntok;
+    pthread_mutex_lock(&t->mu);
+    if (t->pendlen > 0) {
+        memcpy(chunk, t->pend, t->pendlen);
+        n = t->pendlen;
+        chunk[n] = 0;
+        t->pendlen = 0;
+        t->pend[0] = 0;
+    }
+    ntok = t->ntok;
+    pthread_mutex_unlock(&t->mu);
+    if (n > 0) tr_append('a', chunk);
+    return ntok;
+}
+
+static int gen_done(GenTask *t) {
+    int d;
+    pthread_mutex_lock(&t->mu);
+    d = !t->active;
+    pthread_mutex_unlock(&t->mu);
+    return d;
 }
 
 static const char *cmds[] = {"/quit", "/reset", "/temp ", "/tokens", "/save ", "/load ", "/help", NULL};
@@ -359,7 +415,6 @@ int tui_chat(int max) {
     char hist[50][1024] = {{0}};
     int hcount = 0, hi = 0;
     char buf[1024] = {0};
-    char reply[2048];
     int len = 0, cur = 0;
     float temp = 0.8f;
     int ntok = 0;
@@ -455,31 +510,70 @@ int tui_chat(int max) {
                         tr_push('s', chat_load(&c, &b, buf + 6) == 0 ? "loaded" : "load failed");
                     } else tr_push('s', "unknown command — /help");
                 } else {
-                    char msg[1024];
-                    StreamCtx sx;
+                    GenTask task;
+                    pthread_t gen;
                     clock_t t0;
-                    strcpy(msg, buf);
-                    tr_push('u', msg);
+                    int leave = 0;
+
+                    strcpy(task.msg, buf);
+                    task.c = &c;
+                    task.g = &g;
+                    task.b = &b;
+                    task.logits = logits;
+                    task.max = max;
+                    task.temp = temp;
+                    task.rc = 0;
+                    task.ntok = 0;
+                    task.secs = 0;
+                    task.active = 1;
+                    task.pendlen = 0;
+                    task.pend[0] = 0;
+                    pthread_mutex_init(&task.mu, NULL);
+                    tr_push('u', task.msg);
                     troff = 0;
                     len = cur = 0;
                     buf[0] = 0;
+                    tr_push('a', "");
+                    tr_draw();
+                    st_draw(&c, temp, 0, 0, 1);
+                    in_draw(buf, cur);
+                    if (pthread_create(&gen, NULL, gen_run, &task) != 0) {
+                        pthread_mutex_destroy(&task.mu);
+                        tr_push('s', "turn failed");
+                        continue;
+                    }
                     t0 = clock();
-                    sx.ntok = 0;
-                    sx.c = &c;
-                    sx.temp = temp;
-                    sx.t0 = t0;
-                    chat_on_token(on_piece, &sx);
-                    if (chat_turn(&c, &g, &b, logits, msg, reply, sizeof(reply), max, temp) != 0) {
-                        chat_on_token(NULL, NULL);
-                        ntok = sx.ntok;
+                    wtimeout(iw, 100);
+                    for (;;) {
+                        int k2, ntk;
+                        ntk = drain(&task);
+                        tr_draw();
+                        st_draw(&c, temp, ntk, (double)(clock() - t0) / CLOCKS_PER_SEC, 1);
+                        if (gen_done(&task)) break;
+                        k2 = wgetch(iw);
+                        if (k2 == KEY_RESIZE) {
+                            layout();
+                        } else if (k2 == KEY_PPAGE) {
+                            troff += th - 1;
+                            if (troff > 100000) troff = 100000;
+                        } else if (k2 == KEY_NPAGE) {
+                            troff -= th - 1;
+                            if (troff < 0) troff = 0;
+                        } else if (k2 == 4 && len == 0) {
+                            leave = 1;
+                        }
+                    }
+                    wtimeout(iw, -1);
+                    pthread_join(gen, NULL);
+                    pthread_mutex_destroy(&task.mu);
+                    ntok = task.ntok;
+                    secs = task.secs;
+                    if (leave) break;
+                    if (task.rc != 0) {
                         tr_push('s', "turn failed");
                     } else {
-                        chat_on_token(NULL, NULL);
-                        secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
-                        ntok = sx.ntok;
-                        if (sx.ntok > 0) tr_setlast(reply[0] ? reply : "(no response)");
-                        else tr_push('a', reply[0] ? reply : "(no response)");
-                        chat_log(msg, reply);
+                        tr_setlast(task.reply[0] ? task.reply : "(no response)");
+                        chat_log(task.msg, task.reply);
                     }
                 }
             }

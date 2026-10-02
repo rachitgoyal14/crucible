@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -O0 -g -Iinclude
 CFLAGS_REL = -Wall -Wextra -O3 -Iinclude
 SRC = src/main.c src/wtxt.c src/math.c src/bpe.c src/model.c src/chat.c src/term.c src/tui_nc.c src/tui_tr.c
 TARGET = crucible
-LDLIBS = -lm -lncurses
+LDLIBS = -lm -lncurses -pthread
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) $(LDLIBS)
