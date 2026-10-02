@@ -7,6 +7,11 @@
 int chat_init(Chat *c) {
     c->ids = malloc(sizeof(int) * CHAT_WINDOW);
     if (!c->ids) return -1;
+    if (kv_init(&c->kv) != 0) {
+        free(c->ids);
+        c->ids = NULL;
+        return -1;
+    }
     c->len = 0;
     c->cap = CHAT_WINDOW;
     c->dropped = 0;
@@ -14,6 +19,7 @@ int chat_init(Chat *c) {
 }
 
 void chat_free(Chat *c) {
+    kv_free(&c->kv);
     free(c->ids);
     c->ids = NULL;
     c->len = 0;
@@ -22,6 +28,7 @@ void chat_free(Chat *c) {
 
 void chat_reset(Chat *c) {
     c->len = 0;
+    kv_reset(&c->kv);
 }
 
 int chat_add(Chat *c, const int *ids, int n) {
@@ -135,7 +142,7 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
         sent = 0;
         acc[0] = 0;
         while (made < max_tokens && c->len < N_CTX) {
-            if (forward(g, c->ids, logits, c->len) != 0) {
+            if (forward_cached(g, &c->kv, c->ids, c->len, logits) != 0) {
                 free(fresh);
                 free(acc);
                 return -1;
@@ -166,6 +173,7 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
             int tmp[N_CTX];
             int nclean = bpe_encode(b, acc, tmp, N_CTX);
             c->len -= made;
+            kv_reset(&c->kv);
             if (nclean > 0) chat_add(c, tmp, nclean);
         }
 
@@ -173,6 +181,7 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
         strip_echo(out);
         if (attempt >= 2 || !is_echo(msg, out)) break;
         c->len = base;
+        kv_reset(&c->kv);
         t += 0.2f;
         if (t > 1.5f) t = 1.5f;
     }

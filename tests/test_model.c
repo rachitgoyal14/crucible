@@ -42,30 +42,45 @@ static int test_sample(void) {
     return 0;
 }
 
-static int test_repeat(void) {
-    static float a[N_VOCAB];
-    static float b[N_VOCAB];
+static int test_cache(void) {
+    static float full[N_VOCAB];
+    static float step[N_VOCAB];
     static int ids4[4] = {15496, 11, 995, 0};
+    static int ids5[5] = {15496, 11, 995, 0, 464};
     Wtxt w;
     GPT2 g;
+    KVCache kv;
 
     if (wtxt_load(&w, "models") != 0) {
         printf("FAIL wtxt load\n");
         return -1;
     }
     wtxt_wire(&g, &w);
-    if (forward(&g, ids4, a, 4) != 0) {
+    if (kv_init(&kv) != 0) {
+        printf("FAIL kv init\n");
+        return -1;
+    }
+    if (forward(&g, ids4, full, 4) != 0) {
         printf("FAIL forward\n");
         return -1;
     }
-    if (forward(&g, ids4, b, 4) != 0) {
-        printf("FAIL forward repeat\n");
+    if (forward_cached(&g, &kv, ids4, 4, step) != 0) {
+        printf("FAIL prefill\n");
         return -1;
     }
-    if (memcmp(a, b, sizeof(a)) != 0) {
-        printf("FAIL repeat parity\n");
+    if (memcmp(full, step, sizeof(full)) != 0) {
+        printf("FAIL cache parity\n");
         return -1;
     }
+    if (forward(&g, ids5, full, 5) != 0 || forward_cached(&g, &kv, ids5, 5, step) != 0) {
+        printf("FAIL extend\n");
+        return -1;
+    }
+    if (memcmp(full, step, sizeof(full)) != 0) {
+        printf("FAIL cache extend\n");
+        return -1;
+    }
+    kv_free(&kv);
     wtxt_free(&w);
     return 0;
 }
@@ -220,8 +235,8 @@ int main(void) {
         return 1;
     }
 
-    if (test_repeat() != 0) {
-        printf("FAIL repeat\n");
+    if (test_cache() != 0) {
+        printf("FAIL cache\n");
         return 1;
     }
 

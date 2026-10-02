@@ -142,9 +142,17 @@ static int generate_text(const char *text, int max) {
         return 1;
     }
     int prompt_len = seq_len;
+    KVCache kv;
+
+    if (kv_init(&kv) != 0) {
+        fprintf(stderr, "out of memory\n");
+        engine_free(&e);
+        return 1;
+    }
     for (int i = 0; i < max && seq_len < N_CTX; i++) {
-        if (forward(&e.g, ids, e.logits, seq_len) != 0) {
+        if (forward_cached(&e.g, &kv, ids, seq_len, e.logits) != 0) {
             fprintf(stderr, "forward failed\n");
+            kv_free(&kv);
             engine_free(&e);
             return 1;
         }
@@ -152,6 +160,7 @@ static int generate_text(const char *text, int max) {
         if (next < 0 || next == N_VOCAB - 1) break;
         ids[seq_len++] = next;
     }
+    kv_free(&kv);
 
     if (bpe_decode(&e.b, ids + prompt_len, seq_len - prompt_len, out, sizeof(out)) < 0) {
         fprintf(stderr, "decode failed\n");

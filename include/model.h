@@ -32,4 +32,16 @@ typedef struct {
 int forward(GPT2 *g, const int *ids, float *logits, int seq_len);
 int sample(const float *logits, int n, float temp, int topk);
 
+typedef struct {
+    int len;
+    int ids[N_CTX];
+    float *k;
+    float *v;
+} KVCache;
+
+int kv_init(KVCache *c);
+void kv_free(KVCache *c);
+void kv_reset(KVCache *c);
+int forward_cached(GPT2 *g, KVCache *c, const int *ids, int n, float *logits);
+
 #endif

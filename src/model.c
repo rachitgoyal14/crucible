@@ -209,6 +209,120 @@ int forward(GPT2 *g, const int *ids, float *logits, int seq_len) {
     return 0;
 }
 
+int kv_init(KVCache *c) {
+    c->k = malloc(sizeof(float) * N_LAYER * N_CTX * N_EMBD);
+    c->v = malloc(sizeof(float) * N_LAYER * N_CTX * N_EMBD);
+    if (!c->k || !c->v) {
+        kv_free(c);
+        return -1;
+    }
+    c->len = 0;
+    return 0;
+}
+
+void kv_free(KVCache *c) {
+    free(c->k);
+    free(c->v);
+    c->k = NULL;
+    c->v = NULL;
+    c->len = 0;
+}
+
+void kv_reset(KVCache *c) {
+    c->len = 0;
+}
+
+static void step_attn(const float *qkv, KVCache *c, int l, int pos, float *cat) {
+    float s[N_CTX];
+    float scale = 1.0f / sqrtf((float)HEAD_DIM);
+    const float *kb = c->k + l * N_CTX * N_EMBD;
+    const float *vb = c->v + l * N_CTX * N_EMBD;
+
+    for (int h = 0; h < N_HEAD; h++) {
+        const float *q = qkv + h * HEAD_DIM;
+        for (int j = 0; j <= pos; j++) {
+            const float *kj = kb + j * N_EMBD + h * HEAD_DIM;
+            float d = 0.0f;
+            for (int t = 0; t < HEAD_DIM; t++) {
+                d += q[t] * kj[t];
+            }
+            s[j] = d * scale;
+        }
+        softmax(s, s, pos + 1);
+        float *o = cat + h * HEAD_DIM;
+        for (int t = 0; t < HEAD_DIM; t++) {
+            o[t] = 0.0f;
+        }
+        for (int j = 0; j <= pos; j++) {
+            const float *vj = vb + j * N_EMBD + h * HEAD_DIM;
+            for (int t = 0; t < HEAD_DIM; t++) {
+                o[t] += s[j] * vj[t];
+            }
+        }
+    }
+}
+
+static int step_block(GPT2 *g, KVCache *c, int l, float *x) {
+    const BlockW *w = &g->blocks[l];
+    float n1[N_EMBD];
+    float qkv[3 * N_EMBD];
+    float cat[N_EMBD];
+    float m[4 * N_EMBD];
+
+    layernorm(x, w->ln1g, w->ln1b, n1, N_EMBD, 1e-5f);
+    matmul(n1, w->wqkv, qkv, 1, N_EMBD, 3 * N_EMBD);
+    add(qkv, w->bqkv, qkv, 3 * N_EMBD);
+    memcpy(c->k + (l * N_CTX + c->len) * N_EMBD, qkv + N_EMBD, sizeof(float) * N_EMBD);
+    memcpy(c->v + (l * N_CTX + c->len) * N_EMBD, qkv + 2 * N_EMBD, sizeof(float) * N_EMBD);
+    step_attn(qkv, c, l, c->len, cat);
+    matmul(cat, w->wproj, n1, 1, N_EMBD, N_EMBD);
+    add(n1, w->bproj, n1, N_EMBD);
+    add(x, n1, x, N_EMBD);
+    layernorm(x, w->ln2g, w->ln2b, n1, N_EMBD, 1e-5f);
+    matmul(n1, w->wfc, m, 1, N_EMBD, 4 * N_EMBD);
+    add(m, w->bfc, m, 4 * N_EMBD);
+    gelu(m, m, 4 * N_EMBD);
+    matmul(m, w->wfp, n1, 1, 4 * N_EMBD, N_EMBD);
+    add(n1, w->bfp, n1, N_EMBD);
+    add(x, n1, x, N_EMBD);
+    return 0;
+}
+
+static int forward_step(GPT2 *g, KVCache *c, int id, float *logits) {
+    float x[N_EMBD];
+    float y[N_EMBD];
+
+    if (c->len >= N_CTX || id < 0 || id >= N_VOCAB) return -1;
+    for (int j = 0; j < N_EMBD; j++) {
+        x[j] = g->wte[id * N_EMBD + j] + g->wpe[c->len * N_EMBD + j];
+    }
+    for (int l = 0; l < N_LAYER; l++) {
+        step_block(g, c, l, x);
+    }
+    layernorm(x, g->lnfg, g->lnfb, y, N_EMBD, 1e-5f);
+    for (int v = 0; v < N_VOCAB; v++) {
+        float d = 0.0f;
+        for (int j = 0; j < N_EMBD; j++) {
+            d += y[j] * g->wte[v * N_EMBD + j];
+        }
+        logits[v] = d;
+    }
+    c->ids[c->len++] = id;
+    return 0;
+}
+
+int forward_cached(GPT2 *g, KVCache *c, const int *ids, int n, float *logits) {
+    int m = 0;
+
+    if (n > N_CTX) return -1;
+    while (m < c->len && m < n && c->ids[m] == ids[m]) m++;
+    if (m < c->len) c->len = m;
+    for (int i = c->len; i < n; i++) {
+        if (forward_step(g, c, ids[i], logits) != 0) return -1;
+    }
+    return 0;
+}
+
 static unsigned long mt[624];
 static int mti = 625;
 

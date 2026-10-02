@@ -11,6 +11,7 @@ typedef struct {
     int len;
     int cap;
     long dropped;
+    KVCache kv;
 } Chat;
 
 int chat_init(Chat *c);
