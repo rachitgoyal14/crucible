@@ -283,6 +283,26 @@ static void in_draw(const char *buf, int cur) {
     wrefresh(iw);
 }
 
+static void in_busy(void) {
+    static const char frames[] = "|/-\\";
+    static int fi;
+    char line[64];
+
+    werase(iw);
+    if (use_color) {
+        wattron(iw, COLOR_PAIR(7));
+        box(iw, 0, 0);
+        wattroff(iw, COLOR_PAIR(7));
+    } else {
+        box(iw, 0, 0);
+    }
+    snprintf(line, sizeof(line), "[%c] responding...", frames[fi++ % 4]);
+    if (use_color) wattron(iw, COLOR_PAIR(3));
+    mvwaddstr(iw, 1, 2, line);
+    if (use_color) wattroff(iw, COLOR_PAIR(3));
+    wrefresh(iw);
+}
+
 static void layout(void) {
     int H, W;
     getmaxyx(stdscr, H, W);
@@ -549,6 +569,7 @@ int tui_chat(int max) {
                         ntk = drain(&task);
                         tr_draw();
                         st_draw(&c, temp, ntk, (double)(clock() - t0) / CLOCKS_PER_SEC, 1);
+                        in_busy();
                         if (gen_done(&task)) break;
                         k2 = wgetch(iw);
                         if (k2 == KEY_RESIZE) {
