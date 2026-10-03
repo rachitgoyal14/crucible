@@ -168,7 +168,7 @@ already on disk:
 | What | Number |
 |---|---|
 | Weights parse at startup | ~14 s (1.9 GB of decimal text) |
-| Greedy `generate "Hello" 20` | ~87 s (full recompute per token) |
+| Greedy `generate "Hello" 5` | ~16 s total, ~0.4 s/token after parse (KV-cache) |
 | `encode` / `forward` after load | instant |
 
 `make release` (`-O3`) speeds the math up further. There are no fused
