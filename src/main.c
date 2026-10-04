@@ -206,7 +206,7 @@ static int chat_repl(int max) {
     History hist = {0};
     char line[1024];
     char reply[2048];
-    float temp = 0.8f;
+    float temp = 0.4f;
     int tty = isatty(STDIN_FILENO);
 
     if (engine_load(&e) != 0) {

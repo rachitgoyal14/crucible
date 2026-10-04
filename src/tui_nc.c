@@ -436,7 +436,7 @@ int tui_chat(int max) {
     int hcount = 0, hi = 0;
     char buf[1024] = {0};
     int len = 0, cur = 0;
-    float temp = 0.8f;
+    float temp = 0.4f;
     int ntok = 0;
     double secs = 0;
     Wtxt w;

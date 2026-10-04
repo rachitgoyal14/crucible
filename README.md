@@ -95,7 +95,7 @@ Inside the chat (both UIs behave the same — streaming, history, `chat.log`):
 
 | Command | Effect |
 |---|---|
-| `/temp N` | sampling temperature, `0` = greedy (default 0.8, floor 1e-5) |
+| `/temp N` | sampling temperature, `0` = greedy (default 0.4, floor 1e-5) |
 | `/tokens` | context usage: `used / 900 tokens, N dropped` |
 | `/save FILE` / `/load FILE` | transcript out / in |
 | `/reset` | forget the conversation |
@@ -125,7 +125,7 @@ src/model.c: 12 × [ LN → fused [Q|K|V] → causal attn (1/√d, -inf mask)
         → final LN → tied LM head → 50257 logits
         │
         ▼
-sampling: top-k 40, temp 0.8 (greedy at 0)
+sampling: top-k 40, temp 0.4 (greedy at 0)
         │
         ▼
 src/chat.c · src/term.c · src/tui_nc.c — streamed token by token
@@ -140,7 +140,7 @@ Details that matter and are pinned by tests:
 - **No KV-cache** — every token is a full recompute over the context,
   exactly like the reference. Slower than caching, but half the code
   and nothing to keep in sync.
-- **Sampling** — top-k 40, temp 0.8, floor `1e-5`, greedy at 0, drawn
+- **Sampling** — top-k 40, temp 0.4, floor `1e-5`, greedy at 0, drawn
   with an in-C MT19937 like the reference.
 - **Tokenizer** — byte-level BPE verified token-for-token against
   HuggingFace `GPT2Tokenizer`, including multi-space and ` $19.99`
