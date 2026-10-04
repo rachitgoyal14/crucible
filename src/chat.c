@@ -59,6 +59,13 @@ static char *turn_stop(char *s) {
         char *p = strstr(s, tags[i]);
         if (p && (!best || p < best)) best = p;
     }
+    /* same headers without the colon, on a word boundary */
+    for (const char *w = s; (w = strstr(w, "User")) != NULL; w++) {
+        if ((w == s || !isalpha((unsigned char)w[-1])) && (!best || w < best)) best = (char *)w;
+    }
+    for (const char *w = s; (w = strstr(w, "Assistant")) != NULL; w++) {
+        if ((w == s || !isalpha((unsigned char)w[-1])) && (!best || w < best)) best = (char *)w;
+    }
     return best;
 }
 
@@ -105,8 +112,8 @@ static int is_echo(const char *msg, const char *rep) {
     while (*msg == ' ' || *msg == '\n' || *msg == '\t') msg++;
     while (*rep == ' ' || *rep == '\n' || *rep == '\t') rep++;
     int ml = strlen(msg), rl = strlen(rep);
-    while (ml > 0 && (msg[ml - 1] == ' ' || msg[ml - 1] == '\n' || msg[ml - 1] == '\t')) ml--;
-    while (rl > 0 && (rep[rl - 1] == ' ' || rep[rl - 1] == '\n' || rep[rl - 1] == '\t')) rl--;
+    while (ml > 0 && strchr(" \n\t.?!,;:", msg[ml - 1])) ml--;
+    while (rl > 0 && strchr(" \n\t.?!,;:", rep[rl - 1])) rl--;
     if (ml < 4 || rl <= 0) return 0;
     if (rl <= ml && ml - rl < 8 && ci_contains(msg, ml, rep, rl)) return 1;
     if (rl > ml && rl - ml < 8 && ci_contains(rep, rl, msg, ml)) return 1;
