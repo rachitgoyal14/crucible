@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,6 +121,33 @@ static int is_echo(const char *msg, const char *rep) {
     return 0;
 }
 
+/* ban tokens that would repeat a 4-gram from context; returns count saved */
+static int ban_repeats(const int *ctx, int n, float *logits, int *bid, float *bval) {
+    int nb = 0;
+    if (n < 3) return 0;
+    int a = ctx[n - 3], b = ctx[n - 2], c = ctx[n - 1];
+    for (int i = 0; i + 3 < n && nb < 64; i++) {
+        if (ctx[i] == a && ctx[i + 1] == b && ctx[i + 2] == c) {
+            int t = ctx[i + 3];
+            if (t < 0 || t >= N_VOCAB || logits[t] <= -INFINITY) continue;
+            int dup = 0;
+            for (int k = 0; k < nb; k++) {
+                if (bid[k] == t) {
+                    dup = 1;
+                    break;
+                }
+            }
+            if (!dup) {
+                bid[nb] = t;
+                bval[nb] = logits[t];
+                logits[t] = -INFINITY;
+                nb++;
+            }
+        }
+    }
+    return nb;
+}
+
 int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *out, int outcap, int max_tokens, float temp) {
     char prompt[2048];
     int ids[N_CTX];
@@ -156,6 +184,16 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
                 free(fresh);
                 free(acc);
                 return -1;
+            }
+            int bid[64];
+            float bval[64];
+            int nb = ban_repeats(c->ids, c->len, logits, bid, bval);
+            float mx = logits[0];
+            for (int v = 1; v < N_VOCAB; v++) {
+                if (logits[v] > mx) mx = logits[v];
+            }
+            if (mx <= -INFINITY) {
+                for (int k = 0; k < nb; k++) logits[bid[k]] = bval[k];
             }
             int next = sample(logits, N_VOCAB, t, 40);
             if (next < 0 || next == N_VOCAB - 1) break;
