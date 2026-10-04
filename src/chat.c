@@ -53,10 +53,13 @@ int chat_add(Chat *c, const int *ids, int n) {
 
 /* earliest fabricated turn header inside a reply, or NULL */
 static char *turn_stop(char *s) {
-    char *a = strstr(s, "\nAssistant:");
-    char *u = strstr(s, "\nUser:");
-    if (a && u) return a < u ? a : u;
-    return a ? a : u;
+    static const char *tags[] = {"\nAssistant:", "\nUser:", "Assistant:", "User:", NULL};
+    char *best = NULL;
+    for (int i = 0; tags[i]; i++) {
+        char *p = strstr(s, tags[i]);
+        if (p && (!best || p < best)) best = p;
+    }
+    return best;
 }
 
 void strip_echo(char *s) {
@@ -116,7 +119,7 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
 
     /* good exchanges so the base model learns the shape of an answer */
     if (c->len == 0) {
-        int sn = bpe_encode(b, "User: Hello\nAssistant: Hello! How can I help you today?\nUser: What is 2+2?\nAssistant: 4.\n", ids, N_CTX);
+        int sn = bpe_encode(b, "User: Hello\nAssistant: Hello! How can I help you today?\nUser: Tell me something brief.\nAssistant: The ocean is deep and full of life.\n", ids, N_CTX);
         if (sn > 0 && chat_add(c, ids, sn) != 0) return -1;
     }
     snprintf(prompt, sizeof(prompt), "User: %s\nAssistant:", msg);
