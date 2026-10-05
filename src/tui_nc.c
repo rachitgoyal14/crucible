@@ -57,7 +57,7 @@ static int cpn(const char *s, int n) {
     return c;
 }
 
-/* wrap s into out (max TR_W each), breaking at spaces; returns line count */
+/* wrap s into out (max 512 each), breaking at spaces; returns line count */
 static int wrap(const char *s, int w, char out[][512], int maxl) {
     int n = 0, len = strlen(s);
     int start = 0;

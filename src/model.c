@@ -1,5 +1,4 @@
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -270,20 +269,16 @@ static int step_block(GPT2 *g, KVCache *c, int l, float *x) {
     float m[4 * N_EMBD];
 
     layernorm(x, w->ln1g, w->ln1b, n1, N_EMBD, 1e-5f);
-    matmul(n1, w->wqkv, qkv, 1, N_EMBD, 3 * N_EMBD);
-    add(qkv, w->bqkv, qkv, 3 * N_EMBD);
+    linear(n1, w->wqkv, w->bqkv, qkv, N_EMBD, 3 * N_EMBD);
     memcpy(c->k + (l * N_CTX + c->len) * N_EMBD, qkv + N_EMBD, sizeof(float) * N_EMBD);
     memcpy(c->v + (l * N_CTX + c->len) * N_EMBD, qkv + 2 * N_EMBD, sizeof(float) * N_EMBD);
     step_attn(qkv, c, l, c->len, cat);
-    matmul(cat, w->wproj, n1, 1, N_EMBD, N_EMBD);
-    add(n1, w->bproj, n1, N_EMBD);
+    linear(cat, w->wproj, w->bproj, n1, N_EMBD, N_EMBD);
     add(x, n1, x, N_EMBD);
     layernorm(x, w->ln2g, w->ln2b, n1, N_EMBD, 1e-5f);
-    matmul(n1, w->wfc, m, 1, N_EMBD, 4 * N_EMBD);
-    add(m, w->bfc, m, 4 * N_EMBD);
+    linear(n1, w->wfc, w->bfc, m, N_EMBD, 4 * N_EMBD);
     gelu(m, m, 4 * N_EMBD);
-    matmul(m, w->wfp, n1, 1, 4 * N_EMBD, N_EMBD);
-    add(n1, w->bfp, n1, N_EMBD);
+    linear(m, w->wfp, w->bfp, n1, 4 * N_EMBD, N_EMBD);
     add(x, n1, x, N_EMBD);
     return 0;
 }
