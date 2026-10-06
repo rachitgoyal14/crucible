@@ -1,5 +1,4 @@
 #include <ctype.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +36,8 @@ int chat_add(Chat *c, const int *ids, int n) {
         memcpy(c->ids, ids + n - c->cap, sizeof(int) * c->cap);
         c->len = c->cap;
         c->dropped += n - c->cap;
+        /* ids shifted -> cached K/V rows no longer line up with them */
+        kv_reset(&c->kv);
         fprintf(stderr, "truncated %d tokens\n", n - c->cap);
         return 0;
     }
@@ -45,6 +46,7 @@ int chat_add(Chat *c, const int *ids, int n) {
         memmove(c->ids, c->ids + drop, sizeof(int) * (c->len - drop));
         c->len -= drop;
         c->dropped += drop;
+        kv_reset(&c->kv);
         fprintf(stderr, "truncated %d tokens\n", drop);
     }
     memcpy(c->ids + c->len, ids, sizeof(int) * n);
@@ -54,7 +56,7 @@ int chat_add(Chat *c, const int *ids, int n) {
 
 /* earliest fabricated turn header inside a reply, or NULL */
 static char *turn_stop(char *s) {
-    static const char *tags[] = {"\nAssistant:", "\nUser:", "Assistant:", "User:", NULL};
+    static const char *tags[] = {"\nQ:", "\nA:", "\nAssistant:", "\nUser:", "Assistant:", "User:", NULL};
     char *best = NULL;
     for (int i = 0; tags[i]; i++) {
         char *p = strstr(s, tags[i]);
@@ -121,43 +123,37 @@ static int is_echo(const char *msg, const char *rep) {
     return 0;
 }
 
-/* ban tokens that would repeat a 4-gram from context; returns count saved */
-static int ban_repeats(const int *ctx, int n, float *logits, int *bid, float *bval) {
-    int nb = 0;
-    if (n < 3) return 0;
-    int a = ctx[n - 3], b = ctx[n - 2], c = ctx[n - 1];
-    for (int i = 0; i + 3 < n && nb < 64; i++) {
-        if (ctx[i] == a && ctx[i + 1] == b && ctx[i + 2] == c) {
-            int t = ctx[i + 3];
-            if (t < 0 || t >= N_VOCAB || logits[t] <= -INFINITY) continue;
-            int dup = 0;
-            for (int k = 0; k < nb; k++) {
-                if (bid[k] == t) {
-                    dup = 1;
-                    break;
-                }
-            }
-            if (!dup) {
-                bid[nb] = t;
-                bval[nb] = logits[t];
-                logits[t] = -INFINITY;
-                nb++;
-            }
+/* realized continuations often repeat the prompt's wording ("The prime
+ * minister of India is..." echoes the question), so a hard n-gram ban
+ * blocks the right answer. Only dampen what the model itself already
+ * emitted this turn: seen tokens get their logit nudged down, nothing
+ * gets banned, and the greedy repetition loop collapses. */
+static void repeat_penalize(const int *ids, int n, float *logits) {
+    static const float pen = 1.15f;
+    int start = n > 48 ? n - 48 : 0;
+
+    for (int i = start; i < n; i++) {
+        int t = ids[i];
+        if (t < 0 || t >= N_VOCAB) continue;
+        if (logits[t] > 0.0f) {
+            logits[t] /= pen;
+        } else {
+            logits[t] *= pen;
         }
     }
-    return nb;
 }
 
 int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *out, int outcap, int max_tokens, float temp) {
     char prompt[2048];
     int ids[N_CTX];
 
-    /* good exchanges so the base model learns the shape of an answer */
+    /* good exchanges so the base model learns the shape of an answer;
+     * Q:/A: is what GPT-2 saw in WebText, User:/Assistant: is not */
     if (c->len == 0) {
-        int sn = bpe_encode(b, "User: Hello\nAssistant: Hello! How can I help you today?\nUser: Tell me something brief.\nAssistant: The ocean is deep and full of life.\n", ids, N_CTX);
+        int sn = bpe_encode(b, "Q: Hello\nA: Hello! How can I help you today?\nQ: Tell me something brief.\nA: The ocean is deep and full of life.\n", ids, N_CTX);
         if (sn > 0 && chat_add(c, ids, sn) != 0) return -1;
     }
-    snprintf(prompt, sizeof(prompt), "User: %s\nAssistant:", msg);
+    snprintf(prompt, sizeof(prompt), "Q: %s\nA:", msg);
     int n = bpe_encode(b, prompt, ids, N_CTX);
     if (n < 0) return -1;
     if (chat_add(c, ids, n) != 0) return -1;
@@ -185,16 +181,7 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
                 free(acc);
                 return -1;
             }
-            int bid[64];
-            float bval[64];
-            int nb = ban_repeats(c->ids, c->len, logits, bid, bval);
-            float mx = logits[0];
-            for (int v = 1; v < N_VOCAB; v++) {
-                if (logits[v] > mx) mx = logits[v];
-            }
-            if (mx <= -INFINITY) {
-                for (int k = 0; k < nb; k++) logits[bid[k]] = bval[k];
-            }
+            repeat_penalize(fresh, made, logits);
             int next = sample(logits, N_VOCAB, t, 40);
             if (next < 0 || next == N_VOCAB - 1) break;
             if (chat_add(c, &next, 1) != 0) {

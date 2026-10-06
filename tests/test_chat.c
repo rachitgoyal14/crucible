@@ -19,6 +19,11 @@ static int test_window(void) {
         printf("FAIL window %d %d %d\n", c.len, c.ids[0], c.ids[CHAT_WINDOW - 1]);
         return 1;
     }
+    /* dropped ids shift everything left: stale K/V rows must be invalidated */
+    if (c.kv.len != 0) {
+        printf("FAIL kv kept %d rows after drop\n", c.kv.len);
+        return 1;
+    }
     chat_free(&c);
 
     char s[] = "hello\nUser: impostor";
