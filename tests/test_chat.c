@@ -129,9 +129,44 @@ static int test_persist(void) {
     return 0;
 }
 
+static int test_first_cap(void) {
+    char a[] = "who is the prime minister of India?";
+    chat_first_cap(a);
+    if (strcmp(a, "Who is the prime minister of India?") != 0) {
+        printf("FAIL cap lower [%s]\n", a);
+        return 1;
+    }
+    char b[] = "Already Capital.";
+    chat_first_cap(b);
+    if (strcmp(b, "Already Capital.") != 0) {
+        printf("FAIL cap intact [%s]\n", b);
+        return 1;
+    }
+    char c[] = "  leading spaces";
+    chat_first_cap(c);
+    if (strcmp(c, "  Leading spaces") != 0) {
+        printf("FAIL cap spaces [%s]\n", c);
+        return 1;
+    }
+    char d[] = "1234 starts with digits";
+    chat_first_cap(d);
+    if (strcmp(d, "1234 starts with digits") != 0) {
+        printf("FAIL cap digits [%s]\n", d);
+        return 1;
+    }
+    char e[] = "";
+    chat_first_cap(e);
+    if (e[0] != 0) {
+        printf("FAIL cap empty\n");
+        return 1;
+    }
+    return 0;
+}
+
 int main(void) {
     if (test_window() != 0) return 1;
     if (test_persist() != 0) return 1;
+    if (test_first_cap() != 0) return 1;
     printf("all pass\n");
     return 0;
 }

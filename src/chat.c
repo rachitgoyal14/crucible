@@ -85,6 +85,16 @@ void chat_on_token(tok_cb cb, void *ctx) {
     tokctx = ctx;
 }
 
+/* an answer that isn't an answer: a bare interjection ("Yes!", "He is")
+ * or a multiple-choice-quiz pattern ("He is. B: He is. C: He is."). GPT-2's
+ * completion for statement-shaped stems in the Q/A frame. */
+static int degenerate(const char *r) {
+    while (*r == ' ' || *r == '\n' || *r == '\t') r++;
+    if (strlen(r) <= 7) return 1;
+    if (strstr(r, " B:") || strstr(r, " C:") || strstr(r, " D:")) return 1;
+    return 0;
+}
+
 int looping(const int *ids, int len) {
     for (int p = 1; p <= 4; p++) {
         if (len < 4 * p) continue;
@@ -143,8 +153,22 @@ static void repeat_penalize(const int *ids, int n, float *logits) {
     }
 }
 
+/* GPT-2 is case-sensitive: sentences in WebText start capitalized, so
+ * "Who is the prime minister..." scores far better answers than "who...".
+ * Promotes the first alphabetic character of the message. */
+void chat_first_cap(char *s) {
+    for (char *p = s; *p; p++) {
+        if (islower((unsigned char)*p)) {
+            *p = (char)toupper((unsigned char)*p);
+            break;
+        }
+        if (!isspace((unsigned char)*p)) break;
+    }
+}
+
 int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *out, int outcap, int max_tokens, float temp) {
     char prompt[2048];
+    char msgc[1024];
     int ids[N_CTX];
 
     /* good exchanges so the base model learns the shape of an answer;
@@ -153,7 +177,9 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
         int sn = bpe_encode(b, "Q: Hello\nA: Hello! How can I help you today?\nQ: Tell me something brief.\nA: The ocean is deep and full of life.\n", ids, N_CTX);
         if (sn > 0 && chat_add(c, ids, sn) != 0) return -1;
     }
-    snprintf(prompt, sizeof(prompt), "Q: %s\nA:", msg);
+    snprintf(msgc, sizeof(msgc), "%s", msg);
+    chat_first_cap(msgc);
+    snprintf(prompt, sizeof(prompt), "Q: %s\nA:", msgc);
     int n = bpe_encode(b, prompt, ids, N_CTX);
     if (n < 0) return -1;
     if (chat_add(c, ids, n) != 0) return -1;
@@ -214,11 +240,18 @@ int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *ou
 
         snprintf(out, outcap, "%s", acc);
         strip_echo(out);
-        if (attempt >= 2 || !is_echo(msg, out)) break;
+        if (attempt >= 2 || (!is_echo(msg, out) && !degenerate(out))) break;
         c->len = base;
         kv_reset(&c->kv);
         t += 0.2f;
         if (t > 1.5f) t = 1.5f;
+    }
+
+    /* don't leave a quiz-junk exchange in the context: at temp 0 a poisoned
+     * context reproduces the junk deterministically, every future turn */
+    if (degenerate(out)) {
+        c->len = base;
+        kv_reset(&c->kv);
     }
 
     free(fresh);

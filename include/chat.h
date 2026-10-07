@@ -21,6 +21,7 @@ int chat_add(Chat *c, const int *ids, int n);
 void strip_echo(char *s);
 int looping(const int *ids, int len);
 typedef void (*tok_cb)(const char *piece, void *ctx);
+void chat_first_cap(char *s);
 void chat_on_token(tok_cb cb, void *ctx);
 int chat_turn(Chat *c, GPT2 *g, BPE *b, float *logits, const char *msg, char *out, int outcap, int max_tokens, float temp);
 int chat_save(Chat *c, BPE *b, const char *path);
